@@ -10,12 +10,15 @@
 
 	let files;
 	let tables;
+	let currentTable;
+	let tableColumns;
+
 	let results;
 	let status;
 
-	onMount(async () => {
-		loadDB();
-	});
+	let query;
+
+	onMount(loadDB);
 
 	async function loadDB() {
 		try {
@@ -26,7 +29,6 @@
 				status = 'DuckDB Instantiated'
 				window.conn = conn;
 			}
-			tables = getTables();
 			return conn;
 		} catch (error) {
 			console.error('Failed to initialize database:', error);
@@ -42,49 +44,48 @@
 		try {
 			const csv = await file.text();
 			await db.registerFileText(file.name, csv);
-			await conn.query(`CREATE OR REPLACE TABLE '${file.name}' AS (SELECT * FROM '${file.name}')`);
+			await conn.query(`CREATE OR REPLACE TABLE '${file.name}' AS FROM '${file.name}'`);
 			tables = await getTables();
 			window.tables = tables;
 		} catch (error) {
-			results = Promise.reject(error);
 		}
 	}
 
 	async function getTables() {
 		const res = await conn.query('SHOW TABLES');
 		return {
-			rows: res.toArray().map((r) => Object.fromEntries(r)),
+			rows: res.toArray().map((r) => r.toJSON()),
 			columns: res.schema.fields
 		};
+	}
+
+	async function getColumns(table) {
+		const query = 'SELECT column_name AS name FROM duckdb_columns() WHERE table_name = ? ORDER BY column_index DESC';
+		const stmt = await conn.prepare(query);
+		const res = await stmt.query(table);
+		return res.toArray();
 	}
 
 	async function execute(query) {
 		status = 'Executing query...';
 		try {
 			let startTime = Date.now();
-			results = conn.query(query);
-			const res = await results;
+			const res = await conn.query(query);
 
 			const {fields} = res.schema;
 			const rows = res.toArray().map((row) => row.toArray());
 
-			results = Promise.resolve({
+			results = {
 				fields,
 				rows,
-			});
+			};
 
 			const executionTime = Date.now() - startTime
 			status = `Query executed in ${executionTime} ms`;
 		} catch (error) {
-			results = Promise.reject(error);
 			status = 'Error'
 		}
-		return results;
 	}
-	window.execute = execute;
-
-	$: tables = Promise.resolve({});
-	$: results = Promise.resolve({});
 
 	status = '';
 
@@ -94,10 +95,21 @@
 		}
 	}
 
-	$: if (tables.rows) {
+	$: if (tables) {
 		const tbl = tables.rows[0].name;
-		const query = `select "Časovna značka",Blok,"P+ Prejeta delovna moč" from '${tbl}' ORDER BY "P+ Prejeta delovna moč" DESC LIMIT 5`;
-		execute(query)
+		if (tbl != currentTable) {
+			query = `SELECT "Časovna značka",
+LEAD("Časovna značka") OVER (ORDER BY "Časovna značka") AS naslednji,
+strptime("Časovna značka", '%Y-%m-%dT%H:%M')::DATETIME AS time1,
+strptime(naslednji, '%Y-%m-%dT%H:%M')::DATETIME AS time2,
+date_diff('minutes', time1, time2) AS trajanje,
+Blok,"P+ Prejeta delovna moč" FROM '${tbl}' ORDER BY "P+ Prejeta delovna moč" DESC LIMIT 5`;
+			currentTable = tbl;
+			(async () => {
+				tableColumns = await getColumns(tbl);
+			})();
+			execute(query);
+		}
 	}
 </script>
 
@@ -126,16 +138,26 @@
 
 	<p>Status: {status}</p>
 
-	{#await results}
-	<p>Nalagam</p>
-	{:then result}
+	{#if tableColumns}
+	<p>Stolpci:</p>
+	<ol>
+		{#each tableColumns as column}
+		<li>{column.name}</li>
+		{/each}
+	</ol>
+	{/if}
+	<textarea bind:value={query} rows="8" cols="100" on:keydown={e=>{e.keyCode===13&&e.metaKey&&execute(query)}}></textarea><br>
+	<button on:click={()=>{execute(query)}}>Poizvedba</button>
+
+	{#if results}
+	<p>Rezultat:</p>
 	<table border="1">
 		<tr>
-		{#each result.fields as col}
+		{#each results.fields as col}
 			<td>{col.name}</td>
 		{/each}
 		</tr>
-		{#each result.rows as row}
+		{#each results.rows as row}
 			<tr>
 				{#each row as val}
 				<td>{val}</td>
@@ -143,7 +165,7 @@
 			</tr>
 		{/each}
 	</table>
-	{/await}
+	{/if}
 </section>
 
 <style>
