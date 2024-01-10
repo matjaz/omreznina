@@ -31,7 +31,7 @@
 	</nav>
 
 	<div class="corner">
-		<a href="https://github.com/matjaz/omreznina">
+		<a href="https://github.com/matjaz/omreznina" target="_blank">
 			<img src={github} alt="GitHub" />
 		</a>
 	</div>
