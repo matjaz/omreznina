@@ -18,7 +18,9 @@
 	let filterMoc = 5;
 	let filterDatumEnabled = false;
 	let filterDatumOd = `2020-01-01`;
-	let filterDatumDo;
+	let filterDatumDo = '';
+	let filterBlokEnabled = false;
+	let filterBlok = '1';
 
 	let results;
 	let status;
@@ -128,6 +130,9 @@ Blok,"P+ Prejeta delovna moč" FROM '${currentTable}'${filterSQL} ORDER BY "traj
 
 	function executeNamed(name) {
 		let filters = [];
+		if (filterBlokEnabled) {
+			filters.push(`Blok = '${filterBlok}'`);
+		}
 		if (filterMocEnabled) {
 			filters.push(`"P+ Prejeta delovna moč" <= '${filterMoc}'`);
 		}
@@ -163,7 +168,7 @@ Blok,"P+ Prejeta delovna moč" FROM '${currentTable}'${filterSQL} ORDER BY "traj
 
 	// auto update on filter change
 	$: {
-		if (filterMocEnabled || filterMoc || filterDatumEnabled || filterDatumOd || filterDatumDo) {
+		if (filterBlokEnabled || filterBlok || filterMocEnabled || filterMoc || filterDatumEnabled || filterDatumOd || filterDatumDo) {
 			executeNamed(currentQuery);
 		}
 	};
@@ -202,6 +207,17 @@ Blok,"P+ Prejeta delovna moč" FROM '${currentTable}'${filterSQL} ORDER BY "traj
 		{/each}
 	</ol>
 	<p>Filter:</p>
+		<label>
+		<input bind:checked={filterBlokEnabled} type="checkbox">
+		Filtriraj blok
+	</label>
+	<select bind:value={filterBlok}>
+		<option value="1">1</option>
+		<option value="2">2</option>
+		<option value="3">3</option>
+		<option value="4">4</option>
+		<option value="5">5</option>
+	</select>
 	<label>
 		<input bind:checked={filterMocEnabled} type="checkbox">
 		Filtriraj moč večjo od
